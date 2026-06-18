@@ -104,7 +104,7 @@ def main():
     parser = argparse.ArgumentParser(description="Preprocess a single video for viz_preprocessed_data.ipynb")
     parser.add_argument(
         "--video",
-        default="/Users/spencerliang/Documents/Tsinghua-local/IMG_5460.mp4",
+        default=os.path.join(REPO_ROOT, "dataset", "IMG_5460.mp4"),
         help="Path to input video file",
     )
     parser.add_argument(
