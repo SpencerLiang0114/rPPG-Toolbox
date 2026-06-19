@@ -1,3 +1,7 @@
+import os
+
+os.environ.setdefault("MPLBACKEND", "Agg")
+
 import dataset.data_loader.BaseLoader
 import dataset.data_loader.COHFACELoader
 import dataset.data_loader.UBFCrPPGLoader

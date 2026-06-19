@@ -5,7 +5,6 @@ import glob
 import os
 from scipy.interpolate import interp1d
 from dataset.data_loader.BaseLoader import BaseLoader
-import matplotlib.pyplot as plt
 
 class LADHLoader(BaseLoader):
     def __init__(self, name, data_path, config_data, device=None):
@@ -214,4 +213,3 @@ class LADHLoader(BaseLoader):
             frames.append(frame)
             success, frame = VidObj.read()
         return np.array(frames)
-

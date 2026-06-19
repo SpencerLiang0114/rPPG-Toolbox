@@ -19,13 +19,12 @@ class TscanTrainer(BaseTrainer):
     def __init__(self, config, data_loader):
         """Inits parameters from args and the writer for TensorboardX."""
         super().__init__()
-        self.device = torch.device(config.DEVICE)
+        self.device, self.num_of_gpu = self._resolve_device(config)
         self.frame_depth = config.MODEL.TSCAN.FRAME_DEPTH
         self.max_epoch_num = config.TRAIN.EPOCHS
         self.model_dir = config.MODEL.MODEL_DIR
         self.model_file_name = config.TRAIN.MODEL_FILE_NAME
         self.batch_size = config.TRAIN.BATCH_SIZE
-        self.num_of_gpu = config.NUM_OF_GPU_TRAIN
         self.base_len = self.num_of_gpu * self.frame_depth
         self.chunk_len = config.TRAIN.DATA.PREPROCESS.CHUNK_LENGTH
         self.config = config 
@@ -34,7 +33,7 @@ class TscanTrainer(BaseTrainer):
 
         if config.TOOLBOX_MODE == "train_and_test":
             self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TRAIN.DATA.PREPROCESS.RESIZE.H).to(self.device)
-            self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
+            self.model = self._wrap_data_parallel(self.model)
 
             self.num_train_batches = len(data_loader["train"])
             self.criterion = torch.nn.MSELoss()
@@ -45,9 +44,25 @@ class TscanTrainer(BaseTrainer):
                 self.optimizer, max_lr=config.TRAIN.LR, epochs=config.TRAIN.EPOCHS, steps_per_epoch=self.num_train_batches)
         elif config.TOOLBOX_MODE == "only_test":
             self.model = TSCAN(frame_depth=self.frame_depth, img_size=config.TEST.DATA.PREPROCESS.RESIZE.H).to(self.device)
-            self.model = torch.nn.DataParallel(self.model, device_ids=list(range(config.NUM_OF_GPU_TRAIN)))
+            self.model = self._wrap_data_parallel(self.model)
         else:
             raise ValueError("TS-CAN trainer initialized in incorrect toolbox mode!")
+
+    @staticmethod
+    def _resolve_device(config):
+        requested_device = str(config.DEVICE)
+        requested_gpus = config.NUM_OF_GPU_TRAIN
+        if requested_device.startswith("cuda") and requested_gpus > 0 and torch.cuda.is_available():
+            return torch.device(requested_device), requested_gpus
+
+        if requested_device.startswith("cuda"):
+            logging.warning("CUDA was requested but is not available. Falling back to CPU for TSCAN.")
+        return torch.device("cpu"), 1
+
+    def _wrap_data_parallel(self, model):
+        if self.device.type == "cuda" and self.num_of_gpu > 1:
+            return torch.nn.DataParallel(model, device_ids=list(range(self.num_of_gpu)))
+        return model
 
     def train(self, data_loader):
         """Training routine for model"""
@@ -158,7 +173,7 @@ class TscanTrainer(BaseTrainer):
         if self.config.TOOLBOX_MODE == "only_test":
             if not os.path.exists(self.config.INFERENCE.MODEL_PATH):
                 raise ValueError("Inference model path error! Please check INFERENCE.MODEL_PATH in your yaml.")
-            self.model.load_state_dict(torch.load(self.config.INFERENCE.MODEL_PATH))
+            self.model.load_state_dict(torch.load(self.config.INFERENCE.MODEL_PATH, map_location=self.device))
             print("Testing uses pretrained model!")
         else:
             if self.config.TEST.USE_LAST_EPOCH:
@@ -166,22 +181,22 @@ class TscanTrainer(BaseTrainer):
                 self.model_dir, self.model_file_name + '_Epoch' + str(self.max_epoch_num - 1) + '.pth')
                 print("Testing uses last epoch as non-pretrained model!")
                 print(last_epoch_model_path)
-                self.model.load_state_dict(torch.load(last_epoch_model_path))
+                self.model.load_state_dict(torch.load(last_epoch_model_path, map_location=self.device))
             else:
                 best_model_path = os.path.join(
                     self.model_dir, self.model_file_name + '_Epoch' + str(self.best_epoch) + '.pth')
                 print("Testing uses best epoch selected using model selection as non-pretrained model!")
                 print(best_model_path)
-                self.model.load_state_dict(torch.load(best_model_path))
+                self.model.load_state_dict(torch.load(best_model_path, map_location=self.device))
 
-        self.model = self.model.to(self.config.DEVICE)
+        self.model = self.model.to(self.device)
         self.model.eval()
         print("Running model evaluation on the testing dataset!")
         with torch.no_grad():
             for _, test_batch in enumerate(tqdm(data_loader["test"], ncols=80)):
                 batch_size = test_batch[0].shape[0]
                 data_test, labels_test = test_batch[0].to(
-                    self.config.DEVICE), test_batch[1].to(self.config.DEVICE)
+                    self.device), test_batch[1].to(self.device)
                 N, D, C, H, W = data_test.shape
                 data_test = data_test.view(N * D, C, H, W)
                 labels_test = labels_test.view(-1, 1)

@@ -1,6 +1,5 @@
 from __future__ import print_function, division
 import torch
-import matplotlib.pyplot as plt
 import argparse, os
 import pandas as pd
 import numpy as np
@@ -19,5 +18,4 @@ class Neg_Pearson(nn.Module):
         cos = nn.CosineSimilarity(dim=0, eps=1e-6)
         pearson = cos(preds - preds.mean(dim=0, keepdim=True), labels - labels.mean(dim=0, keepdim=True))
         return torch.mean(1 - pearson)
-
 

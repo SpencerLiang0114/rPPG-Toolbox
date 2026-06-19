@@ -1,5 +1,8 @@
 import torch
 from torch.autograd import Variable
+import matplotlib
+
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.ticker import ScalarFormatter, MaxNLocator
 import os

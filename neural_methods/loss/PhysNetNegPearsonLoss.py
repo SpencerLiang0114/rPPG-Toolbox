@@ -1,6 +1,5 @@
 from __future__ import print_function, division
 import torch
-import matplotlib.pyplot as plt
 import argparse, os
 import pandas as pd
 import numpy as np
@@ -37,7 +36,6 @@ class Neg_Pearson(nn.Module):
             
         loss = loss/preds.shape[0]
         return loss
-
 
 
 
